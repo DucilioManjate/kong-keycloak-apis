@@ -1,0 +1,95 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres
+    restart: always
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=test
+    ports:
+      - 5432:5432
+    networks:
+      - keycloak
+
+  service1:
+    build:
+      context: ./service1
+      dockerfile: Dockerfile
+    command: npm run start
+    ports:
+      - 3010:3010
+    networks:
+      - keycloak
+      - kong
+    volumes:
+      - ./service1:/usr/src/app
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  service2:
+    build:
+      context: ./service2
+      dockerfile: Dockerfile
+    command: npm run start
+    ports:
+      - 3020:3020
+    networks:
+      - keycloak
+      - kong
+    volumes:
+      - ./service2:/usr/src/app
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:legacy
+    environment:
+      DB_VENDOR: POSTGRES
+      DB_ADDR: postgres
+      DB_DATABASE: test
+      DB_USER: postgres
+      DB_SCHEMA: public
+      DB_PASSWORD: postgres
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: admin
+    ports:
+      - 8080:8080
+    depends_on:
+      - postgres
+    networks:
+      - keycloak
+
+  kong:
+    image: kong:latest
+    networks:
+    - kong
+    volumes:
+      - ./kong/config/:/opt/kong
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG:  "/opt/kong/kong.yml"
+    healthcheck:
+      test: [ "CMD", "kong", "health" ]
+      interval: 5s
+      timeout: 2s
+      retries: 15
+    ports:
+      - 8000:8000
+      - 8001:8001
+      - 8443:8443
+      - 8444:8444
+
+volumes:
+  pg-data:
+
+networks:
+  kong:
+    driver: bridge
+  keycloak:
+    driver: bridge
